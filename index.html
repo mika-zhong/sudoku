@@ -1,3 +1,10 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="解が一つに決まる問題を毎回自動生成する数独ゲーム。メモ、ヒント、やり直しに対応。">
+<meta name="color-scheme" content="light dark">
 <title>数独</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
@@ -36,7 +43,7 @@
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
-body { background: var(--bg); color: var(--ink); font-family: var(--font-display); padding-inline: 16px; padding-block: 20px 32px; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font-display); padding-inline: 16px; padding-block: calc(20px + env(safe-area-inset-top, 0px)) calc(32px + env(safe-area-inset-bottom, 0px)); }
 .app { max-width: 880px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
 header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 h1 { font-size: 1.8rem; margin: 0; letter-spacing: .08em; }
@@ -79,6 +86,8 @@ select { font: 500 1rem var(--font-display); padding: 9px 8px; border-radius: 8p
 @media (max-width: 560px) { .pad { gap: 4px; } .main { gap: 16px; } }
 @media (prefers-reduced-motion: no-preference) { .cell { transition: background .08s; } }
 </style>
+</head>
+<body>
 
 <div class="app">
   <header>
@@ -265,3 +274,5 @@ select { font: 500 1rem var(--font-display); padding: 9px 8px; border-radius: 8p
   build(); newGame();
 })();
 </script>
+</body>
+</html>
