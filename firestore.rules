@@ -1,0 +1,31 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // rankings/{easy|normal|hard}/scores/{id}
+    match /rankings/{level}/scores/{scoreId} {
+      // ランキングは誰でも見られる
+      allow read: if true;
+
+      // 記録の追加はログインした本人のみ。値の範囲もチェックする
+      allow create: if request.auth != null
+        && level in ['easy', 'normal', 'hard']
+        && request.resource.data.keys().hasOnly(['uid', 'name', 'photo', 'time', 'miss', 'createdAt'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 50
+        && (request.resource.data.photo == null
+            || (request.resource.data.photo is string && request.resource.data.photo.size() <= 500))
+        && request.resource.data.time is int
+        && request.resource.data.time >= 10
+        && request.resource.data.time < 86400
+        && request.resource.data.miss is int
+        && request.resource.data.miss >= 0
+        && request.resource.data.miss < 1000
+        && request.resource.data.createdAt == request.time;
+
+      // 登録済みの記録は書き換え・削除できない
+      allow update, delete: if false;
+    }
+  }
+}

@@ -43,6 +43,7 @@
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font-display); padding-inline: 16px; padding-block: calc(20px + env(safe-area-inset-top, 0px)) calc(32px + env(safe-area-inset-bottom, 0px)); }
 .app { max-width: 880px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
 header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
@@ -83,13 +84,44 @@ button.btn:focus-visible, .pad button:focus-visible { outline: 3px solid var(--a
 .hint-text { font-size: .85rem; color: var(--muted); margin: 0; line-height: 1.6; }
 label.field { display: flex; flex-direction: column; gap: 4px; font-size: .85rem; color: var(--muted); }
 select { font: 500 1rem var(--font-display); padding: 9px 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); }
-@media (max-width: 560px) { .pad { gap: 4px; } .main { gap: 16px; } }
+.msg.err { color: var(--err); }
+.top { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.account { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-left: auto; }
+.account .btn { padding: 7px 12px; font-size: .85rem; }
+.user { display: flex; align-items: center; gap: 6px; font-size: .9rem; min-width: 0; }
+.user span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 12em; }
+.avatar { width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--line); object-fit: cover; }
+dialog { width: min(560px, calc(100vw - 32px)); max-height: calc(100dvh - 48px); border: 1px solid var(--line); border-radius: 14px; padding: 0; background: var(--panel); color: var(--ink); }
+dialog::backdrop { background: rgb(40 10 25 / .45); }
+.dlg { display: flex; flex-direction: column; gap: 14px; padding: 18px 16px; }
+.dlg-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.dlg-head h2 { margin: 0; font-size: 1.3rem; letter-spacing: .06em; }
+.table-wrap { overflow-x: auto; }
+.rank { width: 100%; border-collapse: collapse; font-size: .9rem; }
+.rank th { text-align: left; font-weight: 500; font-size: .75rem; letter-spacing: .06em; color: var(--muted); padding: 6px 8px; border-bottom: 1px solid var(--line); }
+.rank td { padding: 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.rank td.num { font-family: var(--font-num); font-variant-numeric: tabular-nums; text-align: right; }
+.rank th.num { text-align: right; }
+.rank td.who { display: flex; align-items: center; gap: 8px; white-space: normal; min-width: 8em; }
+.rank td.who img { width: 22px; height: 22px; border-radius: 50%; }
+.rank tr.me td { background: var(--hl); font-weight: 700; }
+.rank .pos { font-family: var(--font-num); font-weight: 600; color: var(--accent); }
+.mybest { margin: 0; font-size: .9rem; color: var(--muted); }
+@media (max-width: 560px) { .pad { gap: 4px; } .main { gap: 16px; } .rank .date { display: none; } }
 @media (prefers-reduced-motion: no-preference) { .cell { transition: background .08s; } }
 </style>
 </head>
 <body>
 
 <div class="app">
+  <div class="top">
+    <div class="account">
+      <button class="btn" id="rankBtn" type="button">ランキング</button>
+      <span class="user" id="user" hidden><img class="avatar" id="avatar" alt="" referrerpolicy="no-referrer"><span id="uname"></span></span>
+      <button class="btn on" id="login" type="button">Googleでログイン</button>
+      <button class="btn" id="logout" type="button" hidden>ログアウト</button>
+    </div>
+  </div>
   <header>
     <h1>数独</h1>
     <div class="stats"><span>時間 <b id="time">0:00</b></span><span>ミス <b id="miss">0</b></span></div>
@@ -98,6 +130,7 @@ select { font: 500 1rem var(--font-display); padding: 9px 8px; border-radius: 8p
     <div class="board-wrap"><div class="board" id="board" role="grid" aria-label="数独の盤面"></div></div>
     <div class="side">
       <p class="msg" id="msg" aria-live="polite"></p>
+      <p class="msg" id="saveMsg" aria-live="polite"></p>
       <div class="pad" id="pad"></div>
       <div class="seg">
         <button class="btn" id="notes" aria-pressed="false">メモ</button>
@@ -158,16 +191,19 @@ select { font: 500 1rem var(--font-display); padding: 9px 8px; border-radius: 8p
   }
 
   // ---------- 状態 ----------
-  var S = { puzzle: [], solution: [], v: [], notes: [], sel: -1, noteMode: false, hist: [], miss: 0, secs: 0, over: false };
+  var S = { puzzle: [], solution: [], v: [], notes: [], sel: -1, noteMode: false, hist: [], miss: 0, hints: 0, secs: 0, over: false, level: 'normal' };
+  var LEVEL_KEY = { '40': 'easy', '32': 'normal', '27': 'hard' };
   var timer = null;
 
   function newGame() {
     var g = generate(parseInt($('level').value, 10));
     S.puzzle = g.puzzle; S.solution = g.solution; S.v = g.puzzle.slice();
-    S.notes = new Array(81).fill(0); S.hist = []; S.miss = 0; S.secs = 0; S.over = false; S.sel = -1;
+    S.notes = new Array(81).fill(0); S.hist = []; S.miss = 0; S.hints = 0; S.secs = 0; S.over = false; S.sel = -1;
+    S.level = LEVEL_KEY[$('level').value];
     clearInterval(timer); timer = setInterval(function () { if (!S.over) { S.secs++; renderStats(); } }, 1000);
     setMsg('');
     render();
+    document.dispatchEvent(new CustomEvent('sudoku:new'));
   }
   function setMsg(t, win) { var m = $('msg'); m.textContent = t; m.className = 'msg' + (win ? ' win' : ''); }
   function fmt(s) { return Math.floor(s / 60) + ':' + ('0' + (s % 60)).slice(-2); }
@@ -242,12 +278,13 @@ select { font: 500 1rem var(--font-display); padding: 9px 8px; border-radius: 8p
       var empt = []; for (var k = 0; k < 81; k++) if (S.v[k] !== S.solution[k]) empt.push(k);
       if (!empt.length) return; i = empt[Math.floor(Math.random() * empt.length)]; S.sel = i;
     }
-    push(); S.v[i] = S.solution[i]; S.notes[i] = 0; clearPeerNotes(i, S.v[i]); setMsg('ヒントを使いました。'); render(); checkWin();
+    push(); S.hints++; S.v[i] = S.solution[i]; S.notes[i] = 0; clearPeerNotes(i, S.v[i]); setMsg('ヒントを使いました。'); render(); checkWin();
   }
   function checkWin() {
     for (var i = 0; i < 81; i++) if (S.v[i] !== S.solution[i]) return;
     S.over = true; clearInterval(timer);
     setMsg('クリア！ タイム ' + fmt(S.secs) + '、ミス ' + S.miss + ' 回。', true); render();
+    document.dispatchEvent(new CustomEvent('sudoku:clear', { detail: { level: S.level, time: S.secs, miss: S.miss, hints: S.hints } }));
   }
   function move(dr, dc) {
     var i = S.sel < 0 ? 40 : S.sel, r = Math.max(0, Math.min(8, Math.floor(i / 9) + dr)), c = Math.max(0, Math.min(8, i % 9 + dc));
@@ -260,7 +297,7 @@ select { font: 500 1rem var(--font-display); padding: 9px 8px; border-radius: 8p
   $('erase').onclick = erase; $('undo').onclick = undo; $('hint').onclick = hint; $('new').onclick = newGame;
   $('level').onchange = newGame;
   document.addEventListener('keydown', function (e) {
-    if (e.target.tagName === 'SELECT') return;
+    if (e.target.tagName === 'SELECT' || document.querySelector('dialog[open]')) return;
     if (e.ctrlKey || e.metaKey) { if (e.key === 'z') { e.preventDefault(); undo(); } return; }
     if (/^[1-9]$/.test(e.key)) place(+e.key);
     else if (e.key === 'Backspace' || e.key === 'Delete' || e.key === '0') { e.preventDefault(); erase(); }
@@ -273,6 +310,179 @@ select { font: 500 1rem var(--font-display); padding: 9px 8px; border-radius: 8p
 
   build(); newGame();
 })();
+</script>
+
+<dialog id="rankDlg" aria-labelledby="rankTitle">
+  <div class="dlg">
+    <div class="dlg-head">
+      <h2 id="rankTitle">ランキング</h2>
+      <form method="dialog"><button class="btn" type="submit">閉じる</button></form>
+    </div>
+    <div class="seg" id="rankTabs">
+      <button class="btn" type="button" data-level="easy" aria-pressed="false">やさしい</button>
+      <button class="btn" type="button" data-level="normal" aria-pressed="true">ふつう</button>
+      <button class="btn" type="button" data-level="hard" aria-pressed="false">むずかしい</button>
+    </div>
+    <p class="mybest" id="myBest"></p>
+    <p class="msg" id="rankStatus" aria-live="polite"></p>
+    <div class="table-wrap">
+      <table class="rank">
+        <thead><tr><th>順位</th><th>名前</th><th class="num">タイム</th><th class="num">ミス</th><th class="date">日付</th></tr></thead>
+        <tbody id="rankBody"></tbody>
+      </table>
+    </div>
+    <p class="hint-text">クリアタイムが速い順に上位20件を表示します。ヒントを使ったゲームは記録されません。</p>
+  </div>
+</dialog>
+
+<script type="module">
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
+import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
+import { getFirestore, collection, addDoc, serverTimestamp, query, where, orderBy, limit, getDocs, getCountFromServer } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+
+const firebaseConfig = {
+  apiKey: 'AIzaSyBQUUP-DCXDLJl5CpB6bRwpmGvDgqEPQYc',
+  authDomain: 'sudoku-e66c5.firebaseapp.com',
+  projectId: 'sudoku-e66c5',
+  storageBucket: 'sudoku-e66c5.firebasestorage.app',
+  messagingSenderId: '287739096358',
+  appId: '1:287739096358:web:08710c17ab387f1e15e5e7'
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const provider = new GoogleAuthProvider();
+provider.setCustomParameters({ prompt: 'select_account' });
+
+const LEVELS = { easy: 'やさしい', normal: 'ふつう', hard: 'むずかしい' };
+const LEVEL_KEY = { '40': 'easy', '32': 'normal', '27': 'hard' };
+const $ = (id) => document.getElementById(id);
+const scores = (level) => collection(db, 'rankings', level, 'scores');
+const fmt = (s) => Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+
+let user = null;
+let pending = null;   // ログイン前にクリアした記録
+let shown = 'normal'; // ランキングで表示中の難易度
+
+function setSave(text, kind) {
+  const m = $('saveMsg');
+  m.textContent = text;
+  m.className = 'msg' + (kind ? ' ' + kind : '');
+}
+
+// ---------- ログイン ----------
+onAuthStateChanged(auth, (u) => {
+  user = u;
+  $('login').hidden = !!u;
+  $('logout').hidden = !u;
+  $('user').hidden = !u;
+  if (u) {
+    $('uname').textContent = u.displayName || '名無し';
+    $('avatar').hidden = !u.photoURL;
+    if (u.photoURL) $('avatar').src = u.photoURL;
+    if (pending) { const r = pending; pending = null; save(r); }
+  }
+  if ($('rankDlg').open) load(shown);
+});
+
+$('login').addEventListener('click', async () => {
+  try {
+    await signInWithPopup(auth, provider);
+  } catch (e) {
+    if (e.code === 'auth/popup-closed-by-user' || e.code === 'auth/cancelled-popup-request') return;
+    if (e.code === 'auth/popup-blocked') setSave('ポップアップがブロックされました。ブラウザでこのサイトのポップアップを許可してください。', 'err');
+    else setSave('ログインできませんでした(' + e.code + ')。', 'err');
+  }
+});
+$('logout').addEventListener('click', () => signOut(auth));
+
+// ---------- 記録 ----------
+document.addEventListener('sudoku:new', () => { pending = null; setSave(''); });
+document.addEventListener('sudoku:clear', (e) => {
+  const r = e.detail;
+  if (r.hints > 0) { setSave('ヒントを使ったので、この記録はランキングに登録されません。'); return; }
+  if (!user) { pending = r; setSave('ログインすると、この記録をランキングに登録できます。'); return; }
+  save(r);
+});
+
+async function save(r) {
+  setSave('記録を保存しています…');
+  try {
+    await addDoc(scores(r.level), {
+      uid: user.uid,
+      name: (user.displayName || '名無し').slice(0, 50),
+      photo: user.photoURL || null,
+      time: r.time,
+      miss: r.miss,
+      createdAt: serverTimestamp()
+    });
+    const faster = await getCountFromServer(query(scores(r.level), where('time', '<', r.time)));
+    setSave('ランキングに登録しました。' + LEVELS[r.level] + 'で ' + (faster.data().count + 1) + ' 位です。', 'win');
+  } catch (e) {
+    setSave('記録を保存できませんでした(' + (e.code || e.message) + ')。', 'err');
+  }
+}
+
+// ---------- ランキング ----------
+function cell(text, cls) {
+  const td = document.createElement('td');
+  if (cls) td.className = cls;
+  td.textContent = text;
+  return td;
+}
+
+async function load(level) {
+  shown = level;
+  document.querySelectorAll('#rankTabs button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.level === level));
+  const body = $('rankBody');
+  body.replaceChildren();
+  $('rankStatus').textContent = '読み込んでいます…';
+  $('myBest').textContent = '';
+  try {
+    const snap = await getDocs(query(scores(level), orderBy('time'), limit(20)));
+    $('rankStatus').textContent = snap.empty ? 'まだ記録がありません。最初にクリアした人が1位です。' : '';
+    snap.docs.forEach((d, i) => {
+      const s = d.data();
+      const tr = document.createElement('tr');
+      if (user && s.uid === user.uid) tr.className = 'me';
+      tr.appendChild(cell(String(i + 1), 'pos'));
+      const who = cell('', 'who');
+      if (s.photo) {
+        const img = document.createElement('img');
+        img.src = s.photo; img.alt = ''; img.referrerPolicy = 'no-referrer';
+        who.appendChild(img);
+      }
+      who.appendChild(document.createTextNode(s.name || '名無し'));
+      tr.appendChild(who);
+      tr.appendChild(cell(fmt(s.time), 'num'));
+      tr.appendChild(cell(String(s.miss), 'num'));
+      tr.appendChild(cell(s.createdAt ? s.createdAt.toDate().toLocaleDateString('ja-JP') : '', 'date'));
+      body.appendChild(tr);
+    });
+    if (user) {
+      const mine = await getDocs(query(scores(level), where('uid', '==', user.uid)));
+      if (mine.empty) $('myBest').textContent = 'あなたの' + LEVELS[level] + 'の記録はまだありません。';
+      else {
+        const best = Math.min(...mine.docs.map((d) => d.data().time));
+        $('myBest').textContent = 'あなたのベスト: ' + fmt(best) + '(' + mine.size + '回クリア)';
+      }
+    } else {
+      $('myBest').textContent = 'ログインすると自分の記録を登録できます。';
+    }
+  } catch (e) {
+    $('rankStatus').textContent = 'ランキングを読み込めませんでした(' + (e.code || e.message) + ')。';
+  }
+}
+
+$('rankTabs').addEventListener('click', (e) => {
+  const b = e.target.closest('button');
+  if (b) load(b.dataset.level);
+});
+$('rankBtn').addEventListener('click', () => {
+  $('rankDlg').showModal();
+  load(LEVEL_KEY[$('level').value]);
+});
 </script>
 </body>
 </html>
