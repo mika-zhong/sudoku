@@ -1,0 +1,267 @@
+<title>数独</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: 盤面を中央に置き、下にテンキー。広い画面では右側に操作パネル。 */
+:root {
+  --bg: #eef1f4;
+  --panel: #ffffff;
+  --ink: #1d2733;
+  --given: #1d2733;
+  --entry: #1f5fbf;
+  --line: #c3ccd6;
+  --line-strong: #1d2733;
+  --hl: #e1e8f0;
+  --same: #c9dcf5;
+  --sel: #a8c8f2;
+  --err: #c0392b;
+  --err-bg: #f8d9d5;
+  --muted: #5f6c7b;
+  --accent: #1f5fbf;
+  --accent-ink: #ffffff;
+  --font-display: "Zen Maru Gothic", "Hiragino Maru Gothic ProN", "Yu Gothic", sans-serif;
+  --font-num: "JetBrains Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141a21; --panel: #1c242d; --ink: #e4e9ef; --given: #e4e9ef; --entry: #7fb2ff;
+    --line: #36424f; --line-strong: #aab6c4; --hl: #243040; --same: #2d4668; --sel: #3b5f90;
+    --err: #ff8a7a; --err-bg: #4a2420; --muted: #93a0af; --accent: #7fb2ff; --accent-ink: #10202f;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #141a21; --panel: #1c242d; --ink: #e4e9ef; --given: #e4e9ef; --entry: #7fb2ff;
+  --line: #36424f; --line-strong: #aab6c4; --hl: #243040; --same: #2d4668; --sel: #3b5f90;
+  --err: #ff8a7a; --err-bg: #4a2420; --muted: #93a0af; --accent: #7fb2ff; --accent-ink: #10202f;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-display); padding-inline: 16px; padding-block: 20px 32px; }
+.app { max-width: 880px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+h1 { font-size: 1.8rem; margin: 0; letter-spacing: .08em; }
+.stats { display: flex; gap: 16px; font-family: var(--font-num); font-size: .95rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.stats b { color: var(--ink); font-weight: 600; }
+.main { display: flex; gap: 24px; flex-wrap: wrap; align-items: flex-start; }
+.board-wrap { flex: 1 1 360px; min-width: 0; max-width: 560px; margin-inline: auto; width: 100%; }
+.board { display: grid; grid-template-columns: repeat(9, 1fr); aspect-ratio: 1; border: 3px solid var(--line-strong); background: var(--panel); touch-action: manipulation; }
+.cell { position: relative; border: 0; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); background: transparent; color: var(--entry); font: 600 clamp(1.1rem, 4.6vw, 1.9rem)/1 var(--font-num); padding: 0; min-width: 0; cursor: pointer; display: grid; place-items: center; }
+.cell:nth-child(9n+3), .cell:nth-child(9n+6) { border-right: 2px solid var(--line-strong); }
+.cell:nth-child(9n) { border-right: 0; }
+.cell:nth-child(n+19):nth-child(-n+27), .cell:nth-child(n+46):nth-child(-n+54) { border-bottom: 2px solid var(--line-strong); }
+.cell:nth-child(n+73) { border-bottom: 0; }
+.cell.given { color: var(--given); font-weight: 600; }
+.cell.hl { background: var(--hl); }
+.cell.same { background: var(--same); }
+.cell.sel { background: var(--sel); }
+.cell.err { color: var(--err); background: var(--err-bg); }
+.cell:focus-visible { outline: 3px solid var(--accent); outline-offset: -3px; z-index: 1; }
+.notes { position: absolute; inset: 2px; display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr); font: 400 clamp(.5rem, 2vw, .8rem)/1 var(--font-num); color: var(--muted); }
+.notes span { display: grid; place-items: center; }
+.notes span.hit { color: var(--accent); font-weight: 600; }
+.side { flex: 1 1 240px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.seg { display: flex; gap: 6px; }
+.seg button { flex: 1; }
+button.btn { font: 700 .95rem var(--font-display); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 8px; cursor: pointer; }
+button.btn:hover { border-color: var(--accent); }
+button.btn[aria-pressed="true"], button.btn.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+button.btn:focus-visible, .pad button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.pad { display: grid; grid-template-columns: repeat(9, 1fr); gap: 6px; }
+.pad button { position: relative; aspect-ratio: 3/4; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--entry); font: 600 clamp(1.1rem, 4.5vw, 1.6rem) var(--font-num); cursor: pointer; padding: 0; }
+.pad button small { position: absolute; bottom: 3px; left: 0; right: 0; font: 400 .65rem var(--font-num); color: var(--muted); }
+.pad button:disabled { opacity: .3; cursor: default; }
+.pad button:hover:not(:disabled) { border-color: var(--accent); }
+.msg { min-height: 1.4em; font-size: .95rem; color: var(--muted); margin: 0; }
+.msg.win { color: var(--accent); font-weight: 700; }
+.hint-text { font-size: .85rem; color: var(--muted); margin: 0; line-height: 1.6; }
+label.field { display: flex; flex-direction: column; gap: 4px; font-size: .85rem; color: var(--muted); }
+select { font: 500 1rem var(--font-display); padding: 9px 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); }
+@media (max-width: 560px) { .pad { gap: 4px; } .main { gap: 16px; } }
+@media (prefers-reduced-motion: no-preference) { .cell { transition: background .08s; } }
+</style>
+
+<div class="app">
+  <header>
+    <h1>数独</h1>
+    <div class="stats"><span>時間 <b id="time">0:00</b></span><span>ミス <b id="miss">0</b></span></div>
+  </header>
+  <div class="main">
+    <div class="board-wrap"><div class="board" id="board" role="grid" aria-label="数独の盤面"></div></div>
+    <div class="side">
+      <p class="msg" id="msg" aria-live="polite"></p>
+      <div class="pad" id="pad"></div>
+      <div class="seg">
+        <button class="btn" id="notes" aria-pressed="false">メモ</button>
+        <button class="btn" id="erase">消す</button>
+        <button class="btn" id="undo">戻す</button>
+        <button class="btn" id="hint">ヒント</button>
+      </div>
+      <label class="field" for="level">難易度
+        <select id="level"><option value="40">やさしい</option><option value="32" selected>ふつう</option><option value="27">むずかしい</option></select>
+      </label>
+      <button class="btn on" id="new">新しいゲーム</button>
+      <p class="hint-text">キーボード: 1〜9で入力、矢印キーで移動、Delete/Backspaceで消去、Nでメモ切替、Ctrl+Zで戻す。</p>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var boardEl = $('board'), padEl = $('pad');
+  var BIT = function (n) { return 1 << (n - 1); };
+
+  // ---------- 生成 ----------
+  function shuffle(a) { for (var i = a.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)); var t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
+  function peers(i) { var r = Math.floor(i / 9), c = i % 9, br = r - r % 3, bc = c - c % 3, out = []; for (var k = 0; k < 9; k++) { out.push(r * 9 + k, k * 9 + c, (br + Math.floor(k / 3)) * 9 + bc + k % 3); } return out; }
+  var PEERS = []; for (var p = 0; p < 81; p++) PEERS.push(peers(p));
+  function candMask(g, i) { var m = 0; var ps = PEERS[i]; for (var k = 0; k < ps.length; k++) if (g[ps[k]]) m |= BIT(g[ps[k]]); return 511 & ~m; }
+  // 解の数を limit まで数える。randomize=true なら最初の解を乱数順で作る。
+  function solve(g, limit, randomize) {
+    var best = -1, bestMask = 0, bestCount = 10;
+    for (var i = 0; i < 81; i++) if (!g[i]) {
+      var m = candMask(g, i), n = 0, x = m; while (x) { x &= x - 1; n++; }
+      if (n === 0) return 0;
+      if (n < bestCount) { bestCount = n; best = i; bestMask = m; if (n === 1) break; }
+    }
+    if (best < 0) return 1;
+    var opts = []; for (var d = 1; d <= 9; d++) if (bestMask & BIT(d)) opts.push(d);
+    if (randomize) shuffle(opts);
+    var total = 0;
+    for (var o = 0; o < opts.length; o++) {
+      g[best] = opts[o];
+      total += solve(g, limit - total, randomize);
+      if (total >= limit) { if (!randomize) g[best] = 0; return total; }
+      if (randomize && total > 0) return total;
+      g[best] = 0;
+    }
+    return total;
+  }
+  function generate(clues) {
+    var sol = new Array(81).fill(0); solve(sol, 1, true);
+    var puz = sol.slice(), order = shuffle(Array.from({ length: 81 }, function (_, i) { return i; })), left = 81;
+    for (var k = 0; k < order.length && left > clues; k++) {
+      var i = order[k], keep = puz[i]; puz[i] = 0;
+      var copy = puz.slice();
+      if (solve(copy, 2, false) !== 1) puz[i] = keep; else left--;
+    }
+    return { puzzle: puz, solution: sol };
+  }
+
+  // ---------- 状態 ----------
+  var S = { puzzle: [], solution: [], v: [], notes: [], sel: -1, noteMode: false, hist: [], miss: 0, secs: 0, over: false };
+  var timer = null;
+
+  function newGame() {
+    var g = generate(parseInt($('level').value, 10));
+    S.puzzle = g.puzzle; S.solution = g.solution; S.v = g.puzzle.slice();
+    S.notes = new Array(81).fill(0); S.hist = []; S.miss = 0; S.secs = 0; S.over = false; S.sel = -1;
+    clearInterval(timer); timer = setInterval(function () { if (!S.over) { S.secs++; renderStats(); } }, 1000);
+    setMsg('');
+    render();
+  }
+  function setMsg(t, win) { var m = $('msg'); m.textContent = t; m.className = 'msg' + (win ? ' win' : ''); }
+  function fmt(s) { return Math.floor(s / 60) + ':' + ('0' + (s % 60)).slice(-2); }
+  function renderStats() { $('time').textContent = fmt(S.secs); $('miss').textContent = S.miss; }
+
+  function conflicts() {
+    var bad = {};
+    for (var i = 0; i < 81; i++) if (S.v[i]) {
+      var ps = PEERS[i]; for (var k = 0; k < ps.length; k++) if (ps[k] !== i && S.v[ps[k]] === S.v[i]) { bad[i] = true; break; }
+    }
+    return bad;
+  }
+
+  // ---------- 描画 ----------
+  function build() {
+    for (var i = 0; i < 81; i++) {
+      var b = document.createElement('button');
+      b.className = 'cell'; b.type = 'button'; b.dataset.i = i; b.setAttribute('role', 'gridcell');
+      boardEl.appendChild(b);
+    }
+    for (var n = 1; n <= 9; n++) {
+      var pb = document.createElement('button'); pb.type = 'button'; pb.dataset.n = n; pb.innerHTML = n + '<small></small>';
+      padEl.appendChild(pb);
+    }
+  }
+  function render() {
+    var bad = conflicts(), cells = boardEl.children, sv = S.sel >= 0 ? S.v[S.sel] : 0, counts = new Array(10).fill(0);
+    for (var i = 0; i < 81; i++) {
+      var el = cells[i], val = S.v[i], cls = 'cell';
+      if (S.puzzle[i]) cls += ' given';
+      if (S.sel >= 0) {
+        if (i === S.sel) cls += ' sel';
+        else if (sv && val === sv) cls += ' same';
+        else if (PEERS[S.sel].indexOf(i) >= 0) cls += ' hl';
+      }
+      if (bad[i] && !S.puzzle[i]) cls += ' err';
+      el.className = cls;
+      if (val) { el.textContent = val; counts[val]++; }
+      else if (S.notes[i]) {
+        var h = '<div class="notes">'; for (var d = 1; d <= 9; d++) h += '<span' + (sv === d ? ' class="hit"' : '') + '>' + (S.notes[i] & BIT(d) ? d : '') + '</span>'; el.innerHTML = h + '</div>';
+      } else el.textContent = '';
+      el.setAttribute('aria-label', (Math.floor(i / 9) + 1) + '行' + (i % 9 + 1) + '列 ' + (val ? val : '空'));
+    }
+    var pads = padEl.children;
+    for (var n = 1; n <= 9; n++) { pads[n - 1].disabled = counts[n] >= 9 || S.over; pads[n - 1].querySelector('small').textContent = '残' + Math.max(0, 9 - counts[n]); }
+    $('notes').setAttribute('aria-pressed', S.noteMode);
+    renderStats();
+  }
+
+  // ---------- 操作 ----------
+  function push() { S.hist.push({ v: S.v.slice(), notes: S.notes.slice(), miss: S.miss }); if (S.hist.length > 200) S.hist.shift(); }
+  function clearPeerNotes(i, n) { PEERS[i].forEach(function (p) { S.notes[p] &= ~BIT(n); }); }
+  function place(n) {
+    var i = S.sel; if (i < 0 || S.over || S.puzzle[i]) return;
+    if (S.noteMode) {
+      if (S.v[i]) return;
+      push(); S.notes[i] ^= BIT(n);
+    } else {
+      if (S.v[i] === n) return;
+      push(); S.v[i] = n; S.notes[i] = 0;
+      if (n !== S.solution[i]) { S.miss++; setMsg('この数字は合っていません。'); }
+      else { setMsg(''); clearPeerNotes(i, n); }
+    }
+    render(); checkWin();
+  }
+  function erase() { var i = S.sel; if (i < 0 || S.over || S.puzzle[i]) return; if (!S.v[i] && !S.notes[i]) return; push(); S.v[i] = 0; S.notes[i] = 0; render(); }
+  function undo() { var h = S.hist.pop(); if (!h || S.over) return; S.v = h.v; S.notes = h.notes; S.miss = h.miss; render(); }
+  function hint() {
+    if (S.over) return;
+    var i = S.sel;
+    if (i < 0 || S.puzzle[i] || S.v[i] === S.solution[i]) {
+      var empt = []; for (var k = 0; k < 81; k++) if (S.v[k] !== S.solution[k]) empt.push(k);
+      if (!empt.length) return; i = empt[Math.floor(Math.random() * empt.length)]; S.sel = i;
+    }
+    push(); S.v[i] = S.solution[i]; S.notes[i] = 0; clearPeerNotes(i, S.v[i]); setMsg('ヒントを使いました。'); render(); checkWin();
+  }
+  function checkWin() {
+    for (var i = 0; i < 81; i++) if (S.v[i] !== S.solution[i]) return;
+    S.over = true; clearInterval(timer);
+    setMsg('クリア！ タイム ' + fmt(S.secs) + '、ミス ' + S.miss + ' 回。', true); render();
+  }
+  function move(dr, dc) {
+    var i = S.sel < 0 ? 40 : S.sel, r = Math.max(0, Math.min(8, Math.floor(i / 9) + dr)), c = Math.max(0, Math.min(8, i % 9 + dc));
+    S.sel = r * 9 + c; render(); boardEl.children[S.sel].focus();
+  }
+
+  boardEl.addEventListener('click', function (e) { var b = e.target.closest('.cell'); if (b) { S.sel = +b.dataset.i; render(); } });
+  padEl.addEventListener('click', function (e) { var b = e.target.closest('button'); if (b && !b.disabled) place(+b.dataset.n); });
+  $('notes').onclick = function () { S.noteMode = !S.noteMode; render(); };
+  $('erase').onclick = erase; $('undo').onclick = undo; $('hint').onclick = hint; $('new').onclick = newGame;
+  $('level').onchange = newGame;
+  document.addEventListener('keydown', function (e) {
+    if (e.target.tagName === 'SELECT') return;
+    if (e.ctrlKey || e.metaKey) { if (e.key === 'z') { e.preventDefault(); undo(); } return; }
+    if (/^[1-9]$/.test(e.key)) place(+e.key);
+    else if (e.key === 'Backspace' || e.key === 'Delete' || e.key === '0') { e.preventDefault(); erase(); }
+    else if (e.key === 'n' || e.key === 'N') { S.noteMode = !S.noteMode; render(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); move(-1, 0); }
+    else if (e.key === 'ArrowDown') { e.preventDefault(); move(1, 0); }
+    else if (e.key === 'ArrowLeft') { e.preventDefault(); move(0, -1); }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); move(0, 1); }
+  });
+
+  build(); newGame();
+})();
+</script>
